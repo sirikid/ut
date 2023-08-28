@@ -13,26 +13,25 @@
 
 
 
-variables(Node) ->
-    flatten_list(<<",">>, Node).
+-spec variable([[] | binary() | [binary()]]) -> Var | {Var, exploded | pos_integer()} when Var :: binary() | [binary()].
+variable([Words, Modifier] = _Node) ->
+    add_modifier(maybe_unwrap(repeat_to_list(<<".">>, Words)), Modifier).
 
-variable(Node) ->
-    {Var1, Modifier} = {lists:droplast(Node), lists:last(Node)},
-    Var2 = unwrap_maybe(flatten_list(<<".">>, Var1)),
-    add_modifier(Modifier, Var2).
-
-add_modifier([], Var) ->
+-spec add_modifier(Var, [] | binary() | [binary()]) -> Var | {Var, exploded | pos_integer()} when Var :: binary() | [binary()].
+add_modifier(Var, []) ->
     Var;
-add_modifier(<<"*">>, Var) ->
+add_modifier(Var, <<"*">>) ->
     {Var, exploded};
-add_modifier([<<":">>, Limit], Var) ->
+add_modifier(Var, [<<":">>, Limit]) ->
     {Var, binary_to_integer(unicode:characters_to_binary(Limit))}.
 
-unwrap_maybe([Elt]) -> Elt;
-unwrap_maybe(List) -> List.
+-spec maybe_unwrap([T]) -> T | [T] when T :: term().
+maybe_unwrap([Elt]) -> Elt;
+maybe_unwrap(List) -> List.
 
-flatten_list(Sep, [First, Rest]) ->
-    [First | [Elt || [S, Elt] <- Rest, Sep == S]].
+-spec repeat_to_list(Sep, [T | [T | Sep]]) -> [T] when T :: term(), Sep :: term().
+repeat_to_list(Sep, [Hd, Tl]) ->
+    [Hd | lists:map(fun([S, Elt]) when S == Sep -> Elt end, Tl)].
 
 -spec file(file:name()) -> any().
 file(Filename) -> case file:read_file(Filename) of {ok,Bin} -> parse(Bin); Err -> Err end.
@@ -81,11 +80,11 @@ end
 
 -spec 'variables'(input(), index()) -> parse_result().
 'variables'(Input, Index) ->
-  p(Input, Index, 'variables', fun(I,D) -> (p_seq([fun 'variable'/2, p_zero_or_more(p_seq([p_string(<<",">>), fun 'variable'/2]))]))(I,D) end, fun(Node, _Idx) ->variables(Node) end).
+  p(Input, Index, 'variables', fun(I,D) -> (p_seq([fun 'variable'/2, p_zero_or_more(p_seq([p_string(<<",">>), fun 'variable'/2]))]))(I,D) end, fun(Node, _Idx) ->repeat_to_list(<<",">>, Node) end).
 
 -spec 'variable'(input(), index()) -> parse_result().
 'variable'(Input, Index) ->
-  p(Input, Index, 'variable', fun(I,D) -> (p_seq([fun 'word'/2, p_zero_or_more(p_seq([p_string(<<".">>), fun 'word'/2])), p_optional(p_choose([p_string(<<"*">>), p_seq([p_string(<<":">>), p_one_or_more(p_charclass(<<"[0-9]">>))])]))]))(I,D) end, fun(Node, _Idx) ->variable(Node) end).
+  p(Input, Index, 'variable', fun(I,D) -> (p_seq([p_seq([fun 'word'/2, p_zero_or_more(p_seq([p_string(<<".">>), fun 'word'/2]))]), p_optional(p_choose([p_string(<<"*">>), p_seq([p_string(<<":">>), p_one_or_more(p_charclass(<<"[0-9]">>))])]))]))(I,D) end, fun(Node, _Idx) ->variable(Node) end).
 
 -spec 'word'(input(), index()) -> parse_result().
 'word'(Input, Index) ->

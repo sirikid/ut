@@ -1,0 +1,73 @@
+%% -*- mode: erlang; -*-
+
+template <- (literals / expression)* !. `lists:append(Node)`;
+
+%% FIXME: I don't know the correct syntax for \]
+%% literals <- [!#$$&\(-;=?-[]_a-z~] / ...;
+
+%% double $ for Erlang mode, does not affect character class
+literals <- ([!#$$&\(-;=?-\[_a-z~] / "\]" / pct_encoded)+
+`unicode:characters_to_binary(Node)`;
+
+%% FIXME: ucschar and iprivate does not work
+%% ** exception error: no match of right hand side value
+%% {error,{"invalid UTF-8 string",1}}
+
+%% ucschar <- [\xA0-\xD7FF] / [\xF900-\xFDCF] / [\xFDF0-\xFFEF] /
+%% [\x10000-\x1FFFD] / [\x20000-\x2FFFD] / [\x30000-\x3FFFD] /
+%% [\x40000-\x4FFFD] / [\x50000-\x5FFFD] / [\x60000-\x6FFFD] /
+%% [\x70000-\x7FFFD] / [\x80000-\x8FFFD] / [\x90000-\x9FFFD] /
+%% [\xA0000-\xAFFFD] / [\xB0000-\xBFFFD] / [\xC0000-\xCFFFD] /
+%% [\xD0000-\xDFFFD] / [\xE1000-\xEFFFD];
+
+%% iprivate <- [\xE000-\xF8FF] / [\xF0000-\xFFFFD] / [\x100000-\x10FFFD];
+
+pct_encoded <- "%" [0-9A-Za-z] [0-9A-Za-z];
+
+expression <- "{" operator variables "}"
+`list_to_tuple(lists:droplast(tl(Node)))`;
+
+operator <- [+#./;?&=,!@|]?
+`
+case Node of
+     [] -> simple;
+     <<"+">> -> reserved;
+     <<"#">> -> fragment;
+     <<".">> -> labels;
+     <<"/">> -> path;
+     <<";">> -> parameter;
+     <<"?">> -> query;
+     <<"&">> -> query_cont;
+     Other -> {reserved_for_future_extensions, Other}
+end
+`;
+
+variables <- variable ("," variable)* `variables(Node)`;
+
+variable <- word ("." word)* ("*" / ":" [0-9]+)? `variable(Node)`;
+
+word <- ([0-9A-Z_a-z] / pct_encoded)+ `unicode:characters_to_binary(Node)`;
+
+%% Erlang code.
+`
+variables(Node) ->
+    flatten_list(<<",">>, Node).
+
+variable(Node) ->
+    {Var1, Modifier} = {lists:droplast(Node), lists:last(Node)},
+    Var2 = unwrap_maybe(flatten_list(<<".">>, Var1)),
+    add_modifier(Modifier, Var2).
+
+add_modifier([], Var) ->
+    Var;
+add_modifier(<<"*">>, Var) ->
+    {Var, exploded};
+add_modifier([<<":">>, Limit], Var) ->
+    {Var, binary_to_integer(unicode:characters_to_binary(Limit))}.
+
+unwrap_maybe([Elt]) -> Elt;
+unwrap_maybe(List) -> List.
+
+flatten_list(Sep, [First, Rest]) ->
+    [First | [Elt || [S, Elt] <- Rest, Sep == S]].
+`

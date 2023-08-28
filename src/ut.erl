@@ -37,13 +37,15 @@ parse(Template) ->
 -spec parse(Template :: binary(), parse_opts()) -> {ok, t()} | {error, term()}.
 parse(Template, Options) ->
     try ut_parser:parse(Template) of
+        {fail, Fail} ->
+            {error, Fail};
         T1 when is_list(T1) ->
             Conv = proplists:get_value(variables, Options, strings),
             T2 = transform_template(T1, conv_to_fun(Conv)),
             {ok, T2}
     catch
-        _:_:_ ->
-            {error, nil}
+        Class:Exception:Trace ->
+            {error, {Class, Exception, Trace}}
     end.
 
 -spec conv_to_fun(variable_conv()) -> variable_conv_fun().

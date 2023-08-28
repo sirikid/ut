@@ -1,6 +1,6 @@
 -module(ut).
 
--export([parse/1, parse/2]).
+-export(['parse!'/1, 'parse!'/2, parse/1, parse/2]).
 
 -export_type([t/0, parse_opts/0]).
 
@@ -29,6 +29,14 @@
 -type variable_conv_fun() :: fun((variable_name()) -> variable_name()).
 
 %% Functions
+
+-spec 'parse!'(Template :: binary()) -> t() | no_return().
+'parse!'(Template) ->
+    'parse!'(Template, []).
+
+-spec 'parse!'(Template :: binary(), parse_opts()) -> t() | no_return().
+'parse!'(Template, Options) ->
+    {ok, T} = parse(Template, Options), T.
 
 -spec parse(Template :: binary()) -> {ok, t()} | {error, term()}.
 parse(Template) ->

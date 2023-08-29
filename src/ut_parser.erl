@@ -13,21 +13,17 @@
 
 
 
--spec variable([[] | binary() | [binary()]]) -> Var | {Var, exploded | pos_integer()} when Var :: binary() | [binary()].
+-spec variable([[] | binary() | [binary()]]) -> Var | {Var, exploded | pos_integer()} when Var :: [binary()].
 variable([Words, Modifier] = _Node) ->
-    add_modifier(maybe_unwrap(repeat_to_list(<<".">>, Words)), Modifier).
-
--spec add_modifier(Var, [] | binary() | [binary()]) -> Var | {Var, exploded | pos_integer()} when Var :: binary() | [binary()].
-add_modifier(Var, []) ->
-    Var;
-add_modifier(Var, <<"*">>) ->
-    {Var, exploded};
-add_modifier(Var, [<<":">>, Limit]) ->
-    {Var, binary_to_integer(unicode:characters_to_binary(Limit))}.
-
--spec maybe_unwrap([T]) -> T | [T] when T :: term().
-maybe_unwrap([Elt]) -> Elt;
-maybe_unwrap(List) -> List.
+    Var = repeat_to_list(<<".">>, Words),
+    case Modifier of
+        [] ->
+            Var;
+        <<"*">> ->
+            {Var, exploded};
+        [<<":">>, Limit] ->
+            {Var, binary_to_integer(unicode:characters_to_binary(Limit))}
+    end.
 
 -spec repeat_to_list(Sep, [T | [T | Sep]]) -> [T] when T :: term(), Sep :: term().
 repeat_to_list(Sep, [Hd, Tl]) ->

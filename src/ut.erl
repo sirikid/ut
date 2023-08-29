@@ -16,9 +16,7 @@
 
 -type variable() :: variable_name() | {variable_name(), exploded | pos_integer()}.
 
--type variable_name() :: variable_name(atom() | binary()).
-
--type variable_name(T) :: [T, ...] | T.
+-type variable_name() :: [atom() | binary(), ...].
 
 %% Opts
 
@@ -60,7 +58,7 @@ parse(Template, Options) ->
 
 -spec conv_fun(variable_conv()) -> variable_conv_fun().
 conv_fun(strings) ->
-    fun(Var) when is_binary(Var); is_list(Var) -> Var end;
+    fun(Var) -> Var end;
 conv_fun(atoms) ->
     simple_conv(fun erlang:binary_to_atom/1);
 conv_fun('atoms!') ->
@@ -70,11 +68,7 @@ conv_fun(Fun) when is_function(Fun, 1) ->
 
 -spec simple_conv(fun((binary()) -> atom() | binary())) -> variable_conv_fun().
 simple_conv(KeyConvF) ->
-    fun(<<Var/binary>>) ->
-            KeyConvF(Var);
-       ([_|_] = Var) ->
-            lists:map(KeyConvF, Var)
-    end.
+    fun(Var) -> lists:map(KeyConvF, Var) end.
 
 -spec transform_template(t(), variable_conv_fun()) -> t().
 transform_template(T, ConvF) ->

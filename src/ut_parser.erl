@@ -48,7 +48,7 @@ parse(Input) when is_binary(Input) ->
 
 -spec 'literals'(input(), index()) -> parse_result().
 'literals'(Input, Index) ->
-  p(Input, Index, 'literals', fun(I,D) -> (p_one_or_more(p_choose([p_charclass(<<"[!#$$&\(-;=?-\[_a-z~]">>), p_string(<<"\]">>), fun 'pct_encoded'/2])))(I,D) end, fun(Node, _Idx) ->unicode:characters_to_binary(Node) end).
+  p(Input, Index, 'literals', fun(I,D) -> (p_one_or_more(p_choose([p_charclass(<<"[!#$&()*+,\\-.\/0-9:;=?@A-Z\\[\\]_a-z~]">>), fun 'pct_encoded'/2])))(I,D) end, fun(Node, _Idx) ->unicode:characters_to_binary(Node) end).
 
 -spec 'pct_encoded'(input(), index()) -> parse_result().
 'pct_encoded'(Input, Index) ->

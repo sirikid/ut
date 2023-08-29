@@ -2,6 +2,8 @@
 
 -export(['parse!'/1, 'parse!'/2, parse/1, parse/2]).
 
+-export([simple_conv/1]).
+
 -export_type([t/0, parse_opts/0]).
 
 %% Types
@@ -49,22 +51,30 @@ parse(Template, Options) ->
             {error, Fail};
         T1 when is_list(T1) ->
             Conv = proplists:get_value(variables, Options, strings),
-            T2 = transform_template(T1, conv_to_fun(Conv)),
+            T2 = transform_template(T1, conv_fun(Conv)),
             {ok, T2}
     catch
         Class:Exception:Trace ->
             {error, {Class, Exception, Trace}}
     end.
 
--spec conv_to_fun(variable_conv()) -> variable_conv_fun().
-conv_to_fun(strings) ->
-    fun(<<Str/binary>>) -> Str end;
-conv_to_fun(atoms) ->
-    fun erlang:binary_to_atom/1;
-conv_to_fun('atoms!') ->
-    fun erlang:binary_to_existing_atom/1;
-conv_to_fun(Fun) when is_function(Fun, 1) ->
+-spec conv_fun(variable_conv()) -> variable_conv_fun().
+conv_fun(strings) ->
+    fun(Var) when is_binary(Var); is_list(Var) -> Var end;
+conv_fun(atoms) ->
+    simple_conv(fun erlang:binary_to_atom/1);
+conv_fun('atoms!') ->
+    simple_conv(fun erlang:binary_to_existing_atom/1);
+conv_fun(Fun) when is_function(Fun, 1) ->
     Fun.
+
+-spec simple_conv(fun((binary()) -> atom() | binary())) -> variable_conv_fun().
+simple_conv(KeyConvF) ->
+    fun(<<Var/binary>>) ->
+            KeyConvF(Var);
+       ([_|_] = Var) ->
+            lists:map(KeyConvF, Var)
+    end.
 
 -spec transform_template(t(), variable_conv_fun()) -> t().
 transform_template(T, ConvF) ->
@@ -78,12 +88,6 @@ transform_expression({Op, Variables}, ConvF) ->
 
 -spec transform_variable(variable(), variable_conv_fun()) -> variable_name().
 transform_variable({Name, Modifier}, ConvF) ->
-    {transform_name(Name, ConvF), Modifier};
+    {ConvF(Name), Modifier};
 transform_variable(Name, ConvF) ->
-    transform_name(Name, ConvF).
-
--spec transform_name(variable_name(), variable_conv_fun()) -> variable_name().
-transform_name(<<Name/binary>>, ConvF) ->
-    ConvF(Name);
-transform_name([_|_] = Name, ConvF) ->
-    [ConvF(Key) || Key <- Name].
+    ConvF(Name).

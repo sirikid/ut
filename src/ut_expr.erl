@@ -4,9 +4,9 @@
 
 %% Macros
 
--define(is_empty(Value), Value == <<>>; Value == []; Value == #{}).
+-define(is_empty(Value), Value == <<>>; Value == []; Value == #{}; Value == '').
 
--define(is_scalar(Value), is_atom(Value); is_number(Value); is_binary(Value)).
+-define(is_scalar(Value), is_binary(Value); is_number(Value); is_atom(Value)).
 
 %% Records
 

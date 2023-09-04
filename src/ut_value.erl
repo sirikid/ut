@@ -46,7 +46,7 @@ require_keys_fun(RequiredKeys, NextF) ->
 
 -spec try_default_fun(substitutes(), error_fun()) -> error_fun().
 try_default_fun(Defaults, NextF) ->
-    fun(#ut_var{path=Path}=Var, Error) ->
+    fun(#ut_var{}=Var, Error) ->
             get(Var, Defaults, fun(_Var, _Error) -> NextF(Var, Error) end)
     end.
 

@@ -1,87 +1,96 @@
 -module(ut).
 
--export(['parse!'/1, 'parse!'/2, parse/1, parse/2]).
+-include("ut_records.hrl").
 
--export([simple_conv/1]).
+%% Records
 
--export_type([t/0, parse_opts/0]).
+-record(ut_template, {components}).
 
 %% Types
 
--opaque t() :: [literal() | expression()].
+-export_type([template/0, parse_opt/0, expand_opt/0]).
+
+-export_type([expression/0, variable/0, path/0, key/0, modifier/0]).
+
+-opaque template() :: #ut_template{components :: [component()]}.
+
+-type parse_opt() :: {keys, ut_path:conv()}.
+
+-type expand_opt() :: {binary, boolean()}.
+
+%% Internal types
+
+-type component() :: literal() | expression().
 
 -type literal() :: binary().
 
--type expression() :: {atom(), [variable()]}.
+-type expression() :: {operator(), [variable()]}.
 
--type variable() :: variable_name() | {variable_name(), exploded | pos_integer()}.
+-type operator() :: simple | reserved | labels | path | parameter | query | query_cont | fragment.
 
--type variable_name() :: [atom() | binary(), ...].
+-type variable() :: #ut_var{name :: binary(), path :: path(), modifier :: modifier()}.
 
-%% Opts
+-type path() :: [key(), ...].
 
--type parse_opts() :: [parse_opt()].
+-type key() :: atom() | binary().
 
--type parse_opt() :: {variables, variable_conv()}.
-
--type variable_conv() :: strings | atoms | 'atoms!' | variable_conv_fun().
-
--type variable_conv_fun() :: fun((variable_name()) -> variable_name()).
+-type modifier() :: none | exploded | {trim, pos_integer()}.
 
 %% Functions
 
--spec 'parse!'(Template :: binary()) -> t() | no_return().
-'parse!'(Template) ->
-    'parse!'(Template, []).
+-export(['parse!'/1, 'parse!'/2, parse/1, parse/2, expand/2, expand/3]).
 
--spec 'parse!'(Template :: binary(), parse_opts()) -> t() | no_return().
-'parse!'(Template, Options) ->
-    {ok, T} = parse(Template, Options), T.
+%% @equiv 'parse!'(String, [])
+-spec 'parse!'(string()) -> template() | no_return().
+'parse!'(String) ->
+    'parse!'(String, []).
 
--spec parse(Template :: binary()) -> {ok, t()} | {error, term()}.
-parse(Template) ->
-    parse(Template, []).
+-spec 'parse!'(string(), [parse_opt()]) -> template() | no_return().
+'parse!'(String, Options) ->
+    {ok, Template} = parse(String, Options),
+    Template.
 
--spec parse(Template :: binary(), parse_opts()) -> {ok, t()} | {error, term()}.
-parse(Template, Options) ->
-    try ut_parser:parse(Template) of
+%% @equiv parse(String, [])
+-spec parse(string()) -> {ok, template()} | {error, term()}.
+parse(String) ->
+    parse(String, []).
+
+-spec parse(string(), [parse_opt()]) -> {ok, template()} | {error, term()}.
+parse(String, Options) ->
+    case ut_parser:parse(String) of
         {fail, Fail} ->
             {error, Fail};
-        T1 when is_list(T1) ->
-            Conv = proplists:get_value(variables, Options, strings),
-            T2 = transform_template(T1, conv_fun(Conv)),
-            {ok, T2}
-    catch
-        Class:Exception:Trace ->
-            {error, {Class, Exception, Trace}}
+        Components1 ->
+            Conv = proplists:get_value(keys, Options, none),
+            Components2 = transform_expressions(Components1, fun ut_path:conv/3, [Conv]),
+            {ok, #ut_template{components=Components2}}
     end.
 
--spec conv_fun(variable_conv()) -> variable_conv_fun().
-conv_fun(strings) ->
-    fun(Var) -> Var end;
-conv_fun(atoms) ->
-    simple_conv(fun erlang:binary_to_atom/1);
-conv_fun('atoms!') ->
-    simple_conv(fun erlang:binary_to_existing_atom/1);
-conv_fun(Fun) when is_function(Fun, 1) ->
-    Fun.
+-spec expand(template() | string(), map()) -> iodata().
+expand(Template, Substitutes) ->
+    expand(Template, Substitutes, []).
 
--spec simple_conv(fun((binary()) -> atom() | binary())) -> variable_conv_fun().
-simple_conv(KeyConvF) ->
-    fun(Var) -> lists:map(KeyConvF, Var) end.
+-spec expand(template(), map(), [expand_opt()]) -> iodata();
+            (string(), map(), [parse_opt() | expand_opt()]) -> iodata().
+expand(#ut_template{components=Components}, Substitutes, Options) ->
+    Expansion = transform_expressions(Components, fun ut_expr:expand/3, [Substitutes]),
+    case proplists:get_value(binary, Options, true) of
+        false ->
+            Expansion;
+        true ->
+            iolist_to_binary(Expansion)
+    end;
+expand(String, Substitutes, Options) ->
+    {ok, Template} = parse(String, Options),
+    expand(Template, Substitutes, Options).
 
--spec transform_template(t(), variable_conv_fun()) -> t().
-transform_template(T, ConvF) ->
-    [transform_expression(LitOrExpr, ConvF) || LitOrExpr <- T].
+%% Internal functions
 
--spec transform_expression(literal() | expression(), variable_conv_fun()) -> literal() | expression().
-transform_expression(<<Lit/binary>>, _ConvF) ->
-    Lit;
-transform_expression({Op, Variables}, ConvF) ->
-    {Op, [transform_variable(Variable, ConvF) || Variable <- Variables]}.
-
--spec transform_variable(variable(), variable_conv_fun()) -> variable_name().
-transform_variable({Name, Modifier}, ConvF) ->
-    {ConvF(Name), Modifier};
-transform_variable(Name, ConvF) ->
-    ConvF(Name).
+-spec transform_expressions([component()], function(), list()) -> list().
+transform_expressions(Components, Fun, ExtraArgs) ->
+    [case LitOrExpr of
+         <<Lit/binary>> ->
+             Lit;
+         {Op, Variables} ->
+             apply(Fun, [Op, Variables | ExtraArgs])
+     end || LitOrExpr <- Components].

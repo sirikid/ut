@@ -13,19 +13,9 @@
 
 
 
--spec variable([[] | binary() | [binary()]]) -> Var | {Var, exploded | pos_integer()} when Var :: [binary()].
-variable([Words, Modifier] = _Node) ->
-    Var = repeat_to_list(<<".">>, Words),
-    case Modifier of
-        [] ->
-            Var;
-        <<"*">> ->
-            {Var, exploded};
-        [<<":">>, Limit] ->
-            {Var, binary_to_integer(unicode:characters_to_binary(Limit))}
-    end.
+-include("ut_records.hrl").
 
--spec repeat_to_list(Sep, [T | [T | Sep]]) -> [T] when T :: term(), Sep :: term().
+-spec repeat_to_list(S, [T | [S | T]]) -> [T] when S :: term(), T :: term().
 repeat_to_list(Sep, [Hd, Tl]) ->
     [Hd | lists:map(fun([S, Elt]) when S == Sep -> Elt end, Tl)].
 
@@ -62,15 +52,15 @@ parse(Input) when is_binary(Input) ->
 'operator'(Input, Index) ->
   p(Input, Index, 'operator', fun(I,D) -> (p_optional(p_charclass(<<"[+#.\/;?&=,!@|]">>)))(I,D) end, fun(Node, _Idx) ->
 case Node of
-     [] -> simple;
-     <<"+">> -> reserved;
-     <<"#">> -> fragment;
-     <<".">> -> labels;
-     <<"/">> -> path;
-     <<";">> -> parameter;
-     <<"?">> -> query;
-     <<"&">> -> query_cont;
-     Other -> {reserved_for_future_extensions, Other}
+    [] -> simple;
+    <<"+">> -> reserved;
+    <<"#">> -> fragment;
+    <<".">> -> labels;
+    <<"/">> -> path;
+    <<";">> -> parameter;
+    <<"?">> -> query;
+    <<"&">> -> query_cont;
+    Other -> {reserved_for_future_extensions, Other}
 end
  end).
 
@@ -80,11 +70,24 @@ end
 
 -spec 'variable'(input(), index()) -> parse_result().
 'variable'(Input, Index) ->
-  p(Input, Index, 'variable', fun(I,D) -> (p_seq([p_seq([fun 'word'/2, p_zero_or_more(p_seq([p_string(<<".">>), fun 'word'/2]))]), p_optional(p_choose([p_string(<<"*">>), p_seq([p_string(<<":">>), p_one_or_more(p_charclass(<<"[0-9]">>))])]))]))(I,D) end, fun(Node, _Idx) ->variable(Node) end).
+  p(Input, Index, 'variable', fun(I,D) -> (p_seq([p_seq([fun 'key'/2, p_zero_or_more(p_seq([p_string(<<".">>), fun 'key'/2]))]), p_optional(p_choose([p_string(<<"*">>), p_seq([p_string(<<":">>), p_one_or_more(p_charclass(<<"[0-9]">>))])]))]))(I,D) end, fun(Node, _Idx) ->
+[Keys, Suffix] = Node,
+#ut_var{
+   name=unicode:characters_to_binary(Keys),
+   path=repeat_to_list(<<".">>, Keys),
+   modifier=
+       case Suffix of
+           [] -> none;
+           <<"*">> -> exploded;
+           [<<":">>, Limit] ->
+               {trim, binary_to_integer(unicode:characters_to_binary(Limit))}
+       end
+  }
+ end).
 
--spec 'word'(input(), index()) -> parse_result().
-'word'(Input, Index) ->
-  p(Input, Index, 'word', fun(I,D) -> (p_one_or_more(p_choose([p_charclass(<<"[0-9A-Z_a-z]">>), fun 'pct_encoded'/2])))(I,D) end, fun(Node, _Idx) ->unicode:characters_to_binary(Node) end).
+-spec 'key'(input(), index()) -> parse_result().
+'key'(Input, Index) ->
+  p(Input, Index, 'key', fun(I,D) -> (p_one_or_more(p_choose([p_charclass(<<"[0-9A-Z_a-z]">>), fun 'pct_encoded'/2])))(I,D) end, fun(Node, _Idx) ->unicode:characters_to_binary(Node) end).
 
 
 transform(_,Node,_Index) -> Node.

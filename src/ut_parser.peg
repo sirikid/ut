@@ -26,39 +26,43 @@ expression <- "{" operator variables "}"
 operator <- [+#./;?&=,!@|]?
 `
 case Node of
-     [] -> simple;
-     <<"+">> -> reserved;
-     <<"#">> -> fragment;
-     <<".">> -> labels;
-     <<"/">> -> path;
-     <<";">> -> parameter;
-     <<"?">> -> query;
-     <<"&">> -> query_cont;
-     Other -> {reserved_for_future_extensions, Other}
+    [] -> simple;
+    <<"+">> -> reserved;
+    <<"#">> -> fragment;
+    <<".">> -> labels;
+    <<"/">> -> path;
+    <<";">> -> parameter;
+    <<"?">> -> query;
+    <<"&">> -> query_cont;
+    Other -> {reserved_for_future_extensions, Other}
 end
 `;
 
 variables <- variable ("," variable)* `repeat_to_list(<<",">>, Node)`;
 
-variable <- (word ("." word)*) ("*" / ":" [0-9]+)? `variable(Node)`;
+variable <- (key ("." key)*) ("*" / ":" [0-9]+)?
+`
+[Keys, Suffix] = Node,
+#ut_var{
+   name=unicode:characters_to_binary(Keys),
+   path=repeat_to_list(<<".">>, Keys),
+   modifier=
+       case Suffix of
+           [] -> none;
+           <<"*">> -> exploded;
+           [<<":">>, Limit] ->
+               {trim, binary_to_integer(unicode:characters_to_binary(Limit))}
+       end
+  }
+`;
 
-word <- ([0-9A-Z_a-z] / pct_encoded)+ `unicode:characters_to_binary(Node)`;
+key <- ([0-9A-Z_a-z] / pct_encoded)+ `unicode:characters_to_binary(Node)`;
 
 %% Erlang code.
 `
--spec variable([[] | binary() | [binary()]]) -> Var | {Var, exploded | pos_integer()} when Var :: [binary()].
-variable([Words, Modifier] = _Node) ->
-    Var = repeat_to_list(<<".">>, Words),
-    case Modifier of
-        [] ->
-            Var;
-        <<"*">> ->
-            {Var, exploded};
-        [<<":">>, Limit] ->
-            {Var, binary_to_integer(unicode:characters_to_binary(Limit))}
-    end.
+-include("ut_records.hrl").
 
--spec repeat_to_list(Sep, [T | [T | Sep]]) -> [T] when T :: term(), Sep :: term().
+-spec repeat_to_list(S, [T | [S | T]]) -> [T] when S :: term(), T :: term().
 repeat_to_list(Sep, [Hd, Tl]) ->
     [Hd | lists:map(fun([S, Elt]) when S == Sep -> Elt end, Tl)].
 `

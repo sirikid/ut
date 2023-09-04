@@ -47,12 +47,7 @@ require_keys_fun(RequiredKeys, NextF) ->
 -spec try_default_fun(substitutes(), error_fun()) -> error_fun().
 try_default_fun(Defaults, NextF) ->
     fun(#ut_var{path=Path}=Var, Error) ->
-            case do_get(Path, [], Defaults) of
-                {ok, _} = Ok ->
-                    Ok;
-                {error, _} ->
-                    NextF(Var, Error)
-            end
+            get(Var, Defaults, fun(_Var, _Error) -> NextF(Var, Error) end)
     end.
 
 -spec ignore_error(ut:variable(), #ut_key_error{}) -> false.

@@ -163,12 +163,16 @@ groups() ->
        {"{&keys}",         <<"&keys=comma,%2C,dot,.,semi,%3B">>},
        {"{&keys*}",        <<"&comma=%2C&dot=.&semi=%3B">>}]}].
 
-more_expand_test() ->
-    ?assertEqual(
-       <<"https://acme-news.com/posts/2023/9/4/Breaking%21">>,
-       ut:expand(
-         "https://acme-news.com{/section,date.year,date.month,date.day,title:10}",
-         #{section => posts, title => <<"Breaking!">>, date => #{year => 2023, month => 9, day => 4}},
-         [{keys, atoms}]
-        )
-      ).
+more_expand_test_() ->
+    [?_assertEqual(
+        <<"https://acme-news.com/posts/2023/9/4/Breaking%21">>,
+        ut:expand(
+          "https://acme-news.com{/section,date.year,date.month,date.day,title:10}",
+          #{section => posts, title => <<"Breaking!">>, date => #{year => 2023, month => 9, day => 4}},
+          [{keys, atoms}])),
+     ?_assertError(
+        {undefined_variable, <<"undef">>, <<"undef">>},
+        ut:expand("{undef}", #{}, [{ignore_missing_keys, false}])),
+     ?_assertEqual(
+        <<"default">>,
+        ut:expand("{undef}", #{}, [{defaults, #{<<"undef">> => default}}]))].

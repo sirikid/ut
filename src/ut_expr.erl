@@ -10,7 +10,7 @@
 
 %% Records
 
--record(op_desc, {first, sep, named=false, ifemp="", encode=fun uri_string:quote/1}).
+-record(op_desc, {first, sep, named=false, ifemp="", encode=fun quote_but_unreserved/1}).
 
 %% Types
 
@@ -53,10 +53,14 @@ operator_description(Operator) ->
         fragment   -> #op_desc{first="#", sep=",", encode=fun quote_but_reserved/1}
     end.
 
+-spec quote_but_unreserved(term()) -> binary().
+quote_but_unreserved(Scalar) ->
+    uri_string:quote(to_binary(Scalar)).
+
 %% proplists:get_value(reserved, uri_string:allowed_characters()).
 -spec quote_but_reserved(atom() | binary() | number()) -> binary().
-quote_but_reserved(<<String/binary>>) ->
-    uri_string:quote(String, "!#$&'()*+,/:;=?@[]").
+quote_but_reserved(Scalar) ->
+    uri_string:quote(to_binary(Scalar), "!#$&'()*+,/:;=?@[]").
 
 %% Why we have to write this function every time?
 -spec to_binary(atom() | number() | binary()) -> binary().

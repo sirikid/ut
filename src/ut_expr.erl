@@ -14,16 +14,28 @@
 
 %% Types
 
-%% Internal types
+-export_type([expand_opt/0]).
+
+-type expand_opt() :: {ignore_missing_keys, boolean()} | {required_keys, [ut:key()]} | {defaults, ut_value:substitutes()}.
 
 %% Functions
 
--export([expand/3]).
+-export([expand/4]).
 
--spec expand(ut:operator(), [ut:variable()], ut:substitutes()) -> iodata().
-expand(Operator, Variables, Substitutes) ->
+-spec expand(ut:operator(), [ut:variable()], ut:substitutes(), [expand_opt()]) -> iodata().
+expand(Operator, Variables, Substitutes, Options) ->
     Desc = operator_description(Operator),
-    GetValueF = fun(Var) -> ut_value:get(Var, Substitutes, fun ut_value:ignore/2) end,
+    IgnoreMissingKeys = proplists:get_value(ignore_missing_keys, Options, true),
+    RequiredKeys = proplists:get_value(required_keys, Options, []),
+    Defaults = proplists:get_value(defaults, Options, #{}),
+    ErrorF1 =
+        case IgnoreMissingKeys of
+            true -> fun ut_value:ignore_error/2;
+            false -> fun ut_value:throw_error/2
+        end,
+    ErrorF2 = ut_value:try_default_fun(Defaults, ErrorF1),
+    ErrorF3 = ut_value:require_keys_fun(RequiredKeys, ErrorF2),
+    GetValueF = ut_value:get_fun(Substitutes, ErrorF3),
     do_expand(Desc, lists:filtermap(GetValueF, Variables)).
 
 %% Internal functions

@@ -16,7 +16,7 @@
 
 -type parse_opt() :: {keys, ut_path:conv()}.
 
--type expand_opt() :: {binary, boolean()}.
+-type expand_opt() :: {binary, boolean()} | ut_expr:expand_opt().
 
 %% Internal types
 
@@ -73,7 +73,7 @@ expand(Template, Substitutes) ->
 -spec expand(template(), map(), [expand_opt()]) -> iodata();
             (string(), map(), [parse_opt() | expand_opt()]) -> iodata().
 expand(#ut_template{components=Components}, Substitutes, Options) ->
-    Expansion = transform_expressions(Components, fun ut_expr:expand/3, [Substitutes]),
+    Expansion = transform_expressions(Components, fun ut_expr:expand/4, [Substitutes, Options]),
     case proplists:get_value(binary, Options, true) of
         false ->
             Expansion;

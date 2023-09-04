@@ -1,12 +1,10 @@
 -module(ut_value).
 
-%% Includes
-
 -include("ut_records.hrl").
 
 %% Records
 
-%% Types
+-record(ut_key_error, {valid_path, key, rest_path, substitutes}).
 
 %% Internal types
 
@@ -20,7 +18,7 @@
 
 %% Functions
 
--export([get/3, ignore/2, error/2]).
+-export([get/3, get_fun/2, require_keys_fun/2, try_default_fun/2, ignore_error/2, throw_error/2]).
 
 -spec get(ut:variable(), substitutes(), function()) -> false | {true, value()}.
 get(#ut_var{name=Name, path=Path, modifier=Modifier}=Var, Substitutes, ErrorF) ->
@@ -31,22 +29,49 @@ get(#ut_var{name=Name, path=Path, modifier=Modifier}=Var, Substitutes, ErrorF) -
             {true, #ut_value{name=Name, value=Value, modifier=Modifier}}
     end.
 
--spec ignore(ut:variable(), term()) -> false.
-ignore(_Var, _Error) ->
-    false.
+-spec get_fun(substitutes(), error_fun()) -> function().
+get_fun(Substitutes, ErrorF) ->
+    fun(Var) -> get(Var, Substitutes, ErrorF) end.
 
--spec error(ut:variable(), term()) -> no_return().
-error(_Var, _Error) ->
-    erlang:error({undefined}).
+-spec require_keys_fun([ut:key()], error_fun()) -> error_fun().
+require_keys_fun(RequiredKeys, NextF) ->
+    fun(#ut_var{}=Var, #ut_key_error{key=Key}=Error) ->
+            case lists:member(Key, RequiredKeys) of
+                false ->
+                    NextF(Var, Error);
+                true ->
+                    throw_error(Var, Error)
+            end
+    end.
+
+-spec try_default_fun(substitutes(), error_fun()) -> error_fun().
+try_default_fun(Defaults, NextF) ->
+    fun(#ut_var{path=Path}=Var, Error) ->
+            case do_get(Path, [], Defaults) of
+                {ok, _} = Ok ->
+                    Ok;
+                {error, _} ->
+                    NextF(Var, Error)
+            end
+    end.
+
+-spec ignore_error(ut:variable(), #ut_key_error{}) -> false.
+ignore_error(_Var, _Error) -> false.
+
+-spec throw_error(ut:variable(), #ut_key_error{}) -> no_return().
+throw_error(#ut_var{name=Name}, #ut_key_error{key=Key}) ->
+    erlang:error({undefined_variable, Name, Key}).
 
 %% Internal functions
 
--spec do_get([ut:key()], [ut:key()], substitutes()) -> {ok, value()} | {error, {[ut:key()], ut:key(), [ut:key()], substitutes()}}.
-do_get([], _Path, Value) -> {ok, Value};
+-spec do_get([ut:key()], [ut:key()], substitutes()) -> {ok, value()} | {error, #ut_key_error{}}.
+do_get([], _Path, Value) ->
+    {ok, Value};
 do_get([Key|Keys], Path, Substitutes) ->
     case Substitutes of
         #{Key := Value} ->
             do_get(Keys, [Key|Path], Value);
         _ ->
-            {error, {lists:reverse(Path), Key, Keys, Substitutes}}
+            Reason = #ut_key_error{valid_path=lists:reverse(Path), key=Key, rest_path=Keys, substitutes=Substitutes},
+            {error, Reason}
     end.

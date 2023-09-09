@@ -1,0 +1,38 @@
+#+title: UT
+#+author: Ivan Sokolov
+
+UT is a URI templating engine, implementation of [[https://www.rfc-editor.org/rfc/rfc6570][RFC 6570]], written in
+pure Erlang.
+
+* Features
+
++ Full RFC support and handy extensions
+
++ Default values for missing variables
+
++ Require all or specific variables for expansion
+
++ Variables as binary strings or atoms
+
+* Alternatives
+
++ uri_string :: Part of standard library, should be enough for simple
+  cases like encoding query or quoting segment of the path.
+
++ cow_uri_template :: A straightforward implementation without any
+  extensions, part of [[https://hex.pm/packages/cowlib][cowlib]].
+
++ [[https://hex.pm/packages/yuri_template][YuriTemplate]] :: My previous implementation.  After rework I decided
+  to release improved version as a new library instead of bumping
+  major version.
+
++ [[https://hex.pm/packages/uri_template][UriTemplate]] :: Silently ignores template errors.
+
+* Contributing
+=ut_parser.erl= is generated from =ut_parser.peg= using Neotoma. If
+you change the grammar remember to run compilation in =bootstrap=
+profile:
+
+#+begin_src sh
+rebar3 as bootstrap compile
+#+end_src

@@ -10,7 +10,7 @@
 
 %% Records
 
--record(op_desc, {first, sep, named=false, ifemp="", allow=""}).
+-record(op_desc, {first, sep, named=false, ifemp="", allow=unreserved}).
 
 %% Types
 
@@ -44,13 +44,13 @@ expand(Operator, Variables, Substitutes, Options) ->
 operator_description(Operator) ->
     case Operator of
         simple     -> #op_desc{first="", sep=","};
-        reserved   -> #op_desc{first="", sep=",", allow='pct-encoded'};
+        reserved   -> #op_desc{first="", sep=",", allow=reserved};
         labels     -> #op_desc{first=".", sep="."};
         path       -> #op_desc{first="/", sep="/"};
         parameter  -> #op_desc{first=";", sep=";", named=true};
         query      -> #op_desc{first="?", sep="&", named=true, ifemp="="};
         query_cont -> #op_desc{first="&", sep="&", named=true, ifemp="="};
-        fragment   -> #op_desc{first="#", sep=",", allow='pct-encoded'}
+        fragment   -> #op_desc{first="#", sep=",", allow=reserved}
     end.
 
 %% Why we have to write this function every time?
@@ -75,31 +75,31 @@ do_expand(#op_desc{first=First, sep=Sep}=Desc, Values) ->
 expand_value(#op_desc{named=false}, #ut_value{value=Empty}) when ?is_empty(Empty) ->
     [];
 expand_value(#op_desc{named=true, ifemp=IfEmp}, #ut_value{name=Name, value=Empty}) when ?is_empty(Empty) ->
-    [encode(Name, key), IfEmp];
+    [encode(Name, name), IfEmp];
 expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=Scalar, modifier=none}) when ?is_scalar(Scalar) ->
     encode(to_binary(Scalar), Allow);
 expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=Scalar, modifier=none}) when ?is_scalar(Scalar) ->
-    [encode(Name, key), <<"=">>, encode(to_binary(Scalar), Allow)];
+    [encode(Name, name), <<"=">>, encode(to_binary(Scalar), Allow)];
 expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
     encode(string:slice(to_binary(Scalar), 0, Length), Allow);
 expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
-    [encode(Name, key), <<"=">>, encode(string:slice(to_binary(Scalar), 0, Length), Allow)];
+    [encode(Name, name), <<"=">>, encode(string:slice(to_binary(Scalar), 0, Length), Allow)];
 expand_value(#op_desc{allow=Allow}, #ut_value{value=Scalar, modifier=exploded}) when ?is_scalar(Scalar) ->
     [encode(to_binary(Scalar), Allow)];
 expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=[_|_]=List, modifier=none}) ->
     map_join(<<",">>, fun(Value) -> encode(Value, Allow) end, List);
 expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=[_|_]=List, modifier=none}) ->
-    [encode(Name, key), <<"=">> | map_join(<<",">>, fun(Value) -> encode(Value, Allow) end, List)];
+    [encode(Name, name), <<"=">> | map_join(<<",">>, fun(Value) -> encode(Value, Allow) end, List)];
 expand_value(#op_desc{named=false, sep=Sep, allow=Allow}, #ut_value{value=[_|_]=List, modifier=exploded}) ->
     map_join(Sep, fun(Value) -> encode(Value, Allow) end, List);
 expand_value(#op_desc{named=true, sep=Sep, allow=Allow}, #ut_value{name=Name, value=[_|_]=List, modifier=exploded}) ->
-    map_join(Sep, fun(Value) -> [encode(Name, key), <<"=">>, encode(Value, Allow)] end, List);
+    map_join(Sep, fun(Value) -> [encode(Name, name), <<"=">>, encode(Value, Allow)] end, List);
 expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=#{}=Map, modifier=none}) when map_size(Map) > 0 ->
-    map_join(<<",">>, fun({Key, Value}) -> [encode(Key, key), <<",">>, encode(Value, Allow)] end, to_list(Map));
+    map_join(<<",">>, fun({Key, Value}) -> [encode(Key, name), <<",">>, encode(Value, Allow)] end, to_list(Map));
 expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=#{}=Map, modifier=none}) when map_size(Map) > 0 ->
-    [encode(Name, key), <<"=">> | map_join(<<",">>, fun({Key, Value}) -> [encode(Key, key), <<",">>, encode(Value, Allow)] end, to_list(Map))];
+    [encode(Name, name), <<"=">> | map_join(<<",">>, fun({Key, Value}) -> [encode(Key, name), <<",">>, encode(Value, Allow)] end, to_list(Map))];
 expand_value(#op_desc{sep=Sep, allow=Allow}, #ut_value{value=#{}=Map, modifier=exploded}) when map_size(Map) > 0 ->
-    map_join(Sep, fun({Key, Value}) -> [encode(Key, key), <<"=">>, encode(Value, Allow)] end, to_list(Map)).
+    map_join(Sep, fun({Key, Value}) -> [encode(Key, name), <<"=">>, encode(Value, Allow)] end, to_list(Map)).
 
 -spec map_join(Sep, fun((T) -> R), [T]) -> [Sep | R].
 map_join(Sep, Fun, List) ->
@@ -109,42 +109,37 @@ map_join(Sep, Fun, List) ->
 to_list(Map) ->
     lists:keysort(1, maps:to_list(Map)).
 
-encode(Name, key) ->
+encode(Name, name) ->
     uri_string:quote(lax_percent_decode(Name));
 encode(Value, unreserved) ->
     uri_string:quote(Value);
 encode(Value, reserved) ->
-    uri_string:quote(Value, "!#$&'()*+,/:;=?@[]");
-encode(Value, 'pct-encoded') ->
-    preserve_percent_encoded(Value, "!#$&'()*+,/:;=?@[]");
-    %% uri_string:quote(lax_percent_decode(Value), "!#$&'()*+,/:;=?@[]");
-encode(Value, Allow) ->
-    uri_string:quote(Value, Allow).
+    preserve_percent_encoded(Value, "!#$&'()*+,/:;=?@[]").
 
 lax_percent_decode(String) ->
     iolist_to_binary(
-     [case Part of
-          {literal, Literal} ->
-              Literal;
-          {encoded, Encoded} ->
-              binary:decode_hex(binary:part(Encoded, 1, 2))
-      end || Part <- percent_encoding_list(String)]).
+      [case Part of
+           {literal, Literal} ->
+               Literal;
+           {encoded, <<$%, Hex/binary>>} ->
+               binary:decode_hex(Hex)
+       end || Part <- find_percent_encoded(String)]).
 
 preserve_percent_encoded(String, Allow) ->
     iolist_to_binary(
-     [case Part of
-          {literal, Literal} ->
-              uri_string:quote(Literal, Allow);
-          {encoded, Encoded} ->
-              Encoded
-      end || Part <- percent_encoding_list(String)]).
+      [case Part of
+           {literal, Literal} ->
+               uri_string:quote(Literal, Allow);
+           {encoded, Encoded} ->
+               Encoded
+       end || Part <- find_percent_encoded(String)]).
 
-percent_encoding_list(String) ->
+find_percent_encoded(String) ->
     case re:run(String, "%[[:xdigit:]]{2}", [global]) of
         nomatch ->
             [{literal, String}];
         {match, Matches} ->
-            {EndOfLastMatch, Result} =
+            {_, [_Fake | Result]} =
                 lists:foldl(
                   fun([{Pos, Length}], {EndOfPrevMatch, Acc}) ->
                           Literal = binary:part(String, EndOfPrevMatch, Pos-EndOfPrevMatch),
@@ -152,13 +147,6 @@ percent_encoding_list(String) ->
                           {Pos+Length, [{encoded, PctEncoded}, {literal, Literal} | Acc]}
                   end,
                   {0, []},
-                  Matches),
-            Tail =
-                case byte_size(String) of
-                    EndOfLastMatch ->
-                        [];
-                    StringLength ->
-                        [{literal, binary:part(String, EndOfLastMatch, StringLength-EndOfLastMatch)}]
-                end,
-            lists:reverse(Tail ++ Result)
+                  Matches ++ [[{byte_size(String), 0}]]),
+            lists:reverse(Result)
     end.

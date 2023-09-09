@@ -1,0 +1,3 @@
+[submodule "ref-tests"]
+	path = ref-tests
+	url = https://github.com/uri-templates/uritemplate-test

@@ -65,10 +65,11 @@ to_binary(<<Binary/binary>>) ->
     Binary.
 
 -spec do_expand(#op_desc{}, [#ut_value{}]) -> iodata().
-do_expand(_Desc, []) ->
-    [];
-do_expand(#op_desc{first=First, sep=Sep}=Desc, [_|_]=Values) ->
-    [First | map_join(Sep, fun(Value) -> expand_value(Desc, Value) end, Values)].
+do_expand(#op_desc{first=First, sep=Sep}=Desc, Values) ->
+    case map_join(Sep, fun(Value) -> expand_value(Desc, Value) end, Values) of
+        [] -> [];
+        NonEmpty -> [First | NonEmpty]
+    end.
 
 -spec expand_value(#op_desc{}, #ut_value{}) -> iodata().
 expand_value(#op_desc{named=false}, #ut_value{value=Empty}) when ?is_empty(Empty) ->

@@ -64,7 +64,7 @@ do_get([], _Path, Value) ->
     {ok, Value};
 do_get([Key|Keys], Path, Substitutes) ->
     case Substitutes of
-        #{Key := Value} when Value =/= null ->
+        #{Key := Value} when Value =/= null, Value =/= [], Value =/= #{} ->
             do_get(Keys, [Key|Path], Value);
         _ ->
             Reason = #ut_key_error{valid_path=lists:reverse(Path), key=Key, rest_path=Keys, substitutes=Substitutes},

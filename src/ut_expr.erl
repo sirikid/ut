@@ -10,7 +10,7 @@
 
 %% Records
 
--record(op_desc, {first, sep, named=false, ifemp="", encode=fun quote_but_unreserved/1}).
+-record(op_desc, {first, sep, named=false, ifemp="", allow=""}).
 
 %% Types
 
@@ -44,23 +44,14 @@ expand(Operator, Variables, Substitutes, Options) ->
 operator_description(Operator) ->
     case Operator of
         simple     -> #op_desc{first="", sep=","};
-        reserved   -> #op_desc{first="", sep=",", encode=fun quote_but_reserved/1};
+        reserved   -> #op_desc{first="", sep=",", allow="!#$&'()*+,/:;=?@[]"};
         labels     -> #op_desc{first=".", sep="."};
         path       -> #op_desc{first="/", sep="/"};
         parameter  -> #op_desc{first=";", sep=";", named=true};
         query      -> #op_desc{first="?", sep="&", named=true, ifemp="="};
         query_cont -> #op_desc{first="&", sep="&", named=true, ifemp="="};
-        fragment   -> #op_desc{first="#", sep=",", encode=fun quote_but_reserved/1}
+        fragment   -> #op_desc{first="#", sep=",", allow="!#$&'()*+,/:;=?@[]"}
     end.
-
--spec quote_but_unreserved(term()) -> binary().
-quote_but_unreserved(Scalar) ->
-    uri_string:quote(to_binary(Scalar)).
-
-%% proplists:get_value(reserved, uri_string:allowed_characters()).
--spec quote_but_reserved(atom() | binary() | number()) -> binary().
-quote_but_reserved(Scalar) ->
-    uri_string:quote(to_binary(Scalar), "!#$&'()*+,/:;=?@[]").
 
 %% Why we have to write this function every time?
 -spec to_binary(atom() | number() | binary()) -> binary().
@@ -82,32 +73,32 @@ do_expand(#op_desc{first=First, sep=Sep}=Desc, [_|_]=Values) ->
 -spec expand_value(#op_desc{}, #ut_value{}) -> iodata().
 expand_value(#op_desc{named=false}, #ut_value{value=Empty}) when ?is_empty(Empty) ->
     [];
-expand_value(#op_desc{named=true, ifemp=IfEmp, encode=Encode}, #ut_value{name=Name, value=Empty}) when ?is_empty(Empty) ->
-    [Encode(Name), IfEmp];
-expand_value(#op_desc{named=false, encode=Encode}, #ut_value{value=Scalar, modifier=none}) when ?is_scalar(Scalar) ->
-    Encode(to_binary(Scalar));
-expand_value(#op_desc{named=true, encode=Encode}, #ut_value{name=Name, value=Scalar, modifier=none}) when ?is_scalar(Scalar) ->
-    [Encode(Name), <<"=">>, Encode(to_binary(Scalar))];
-expand_value(#op_desc{named=false, encode=Encode}, #ut_value{value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
-    Encode(string:slice(to_binary(Scalar), 0, Length));
-expand_value(#op_desc{named=true, encode=Encode}, #ut_value{name=Name, value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
-    [Encode(Name), <<"=">>, Encode(string:slice(to_binary(Scalar), 0, Length))];
-expand_value(#op_desc{encode=Encode}, #ut_value{value=Scalar, modifier=exploded}) when ?is_scalar(Scalar) ->
-    [Encode(to_binary(Scalar))];
-expand_value(#op_desc{named=false, encode=Encode}, #ut_value{value=[_|_]=List, modifier=none}) ->
-    map_join(<<",">>, Encode, List);
-expand_value(#op_desc{named=true, encode=Encode}, #ut_value{name=Name, value=[_|_]=List, modifier=none}) ->
-    [Encode(Name), <<"=">> | map_join(<<",">>, Encode, List)];
-expand_value(#op_desc{named=false, sep=Sep, encode=Encode}, #ut_value{value=[_|_]=List, modifier=exploded}) ->
-    map_join(Sep, Encode, List);
-expand_value(#op_desc{named=true, sep=Sep, encode=Encode}, #ut_value{name=Name, value=[_|_]=List, modifier=exploded}) ->
-    map_join(Sep, fun(Value) -> [Encode(Name), <<"=">>, Encode(Value)] end, List);
-expand_value(#op_desc{named=false, encode=Encode}, #ut_value{value=#{}=Map, modifier=none}) when map_size(Map) > 0 ->
-    map_join(<<",">>, fun({Key, Value}) -> [Encode(Key), <<",">>, Encode(Value)] end, to_list(Map));
-expand_value(#op_desc{named=true, encode=Encode}, #ut_value{name=Name, value=#{}=Map, modifier=none}) when map_size(Map) > 0 ->
-    [Encode(Name), <<"=">> | map_join(<<",">>, fun({Key, Value}) -> [Encode(Key), <<",">>, Encode(Value)] end, to_list(Map))];
-expand_value(#op_desc{sep=Sep, encode=Encode}, #ut_value{value=#{}=Map, modifier=exploded}) when map_size(Map) > 0 ->
-    map_join(Sep, fun({Key, Value}) -> [Encode(Key), <<"=">>, Encode(Value)] end, to_list(Map)).
+expand_value(#op_desc{named=true, ifemp=IfEmp}, #ut_value{name=Name, value=Empty}) when ?is_empty(Empty) ->
+    [encode(Name, key), IfEmp];
+expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=Scalar, modifier=none}) when ?is_scalar(Scalar) ->
+    encode(to_binary(Scalar), Allow);
+expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=Scalar, modifier=none}) when ?is_scalar(Scalar) ->
+    [encode(Name, key), <<"=">>, encode(to_binary(Scalar), Allow)];
+expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
+    encode(string:slice(to_binary(Scalar), 0, Length), Allow);
+expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
+    [encode(Name, key), <<"=">>, encode(string:slice(to_binary(Scalar), 0, Length), Allow)];
+expand_value(#op_desc{allow=Allow}, #ut_value{value=Scalar, modifier=exploded}) when ?is_scalar(Scalar) ->
+    [encode(to_binary(Scalar), Allow)];
+expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=[_|_]=List, modifier=none}) ->
+    map_join(<<",">>, fun(Value) -> encode(Value, Allow) end, List);
+expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=[_|_]=List, modifier=none}) ->
+    [encode(Name, key), <<"=">> | map_join(<<",">>, fun(Value) -> encode(Value, Allow) end, List)];
+expand_value(#op_desc{named=false, sep=Sep, allow=Allow}, #ut_value{value=[_|_]=List, modifier=exploded}) ->
+    map_join(Sep, fun(Value) -> encode(Value, Allow) end, List);
+expand_value(#op_desc{named=true, sep=Sep, allow=Allow}, #ut_value{name=Name, value=[_|_]=List, modifier=exploded}) ->
+    map_join(Sep, fun(Value) -> [encode(Name, key), <<"=">>, encode(Value, Allow)] end, List);
+expand_value(#op_desc{named=false, allow=Allow}, #ut_value{value=#{}=Map, modifier=none}) when map_size(Map) > 0 ->
+    map_join(<<",">>, fun({Key, Value}) -> [encode(Key, key), <<",">>, encode(Value, Allow)] end, to_list(Map));
+expand_value(#op_desc{named=true, allow=Allow}, #ut_value{name=Name, value=#{}=Map, modifier=none}) when map_size(Map) > 0 ->
+    [encode(Name, key), <<"=">> | map_join(<<",">>, fun({Key, Value}) -> [encode(Key, key), <<",">>, encode(Value, Allow)] end, to_list(Map))];
+expand_value(#op_desc{sep=Sep, allow=Allow}, #ut_value{value=#{}=Map, modifier=exploded}) when map_size(Map) > 0 ->
+    map_join(Sep, fun({Key, Value}) -> [encode(Key, key), <<"=">>, encode(Value, Allow)] end, to_list(Map)).
 
 -spec map_join(Sep, fun((T) -> R), [T]) -> [Sep | R].
 map_join(Sep, Fun, List) ->
@@ -116,3 +107,24 @@ map_join(Sep, Fun, List) ->
 -spec to_list(map()) -> [{term(), term()}].
 to_list(Map) ->
     lists:keysort(1, maps:to_list(Map)).
+
+encode(<<Name/binary>>, key) ->
+    encode(percent_decode(Name), "");
+encode(Scalar, Allowed) when ?is_scalar(Scalar) ->
+    uri_string:quote(to_binary(Scalar), Allowed).
+
+percent_decode(<<String/binary>>) ->
+    case re:run(String, "%[[:xdigit:]]{2}", [global]) of
+        nomatch ->
+            String;
+        {match, Matches} ->
+            {EndOfLastMatch, Result} =
+                lists:foldl(
+                  fun([{Pos, Length}], {EndOfPrevMatch, Acc}) ->
+                          Literal = binary:part(String, EndOfPrevMatch, Pos-EndOfPrevMatch),
+                          DecodeChar = binary:decode_hex(binary:part(String, Pos+1, Length-1)),
+                          {Pos+Length, [Acc, Literal, DecodeChar]}
+                  end,
+                  {0, []}, Matches),
+            iolist_to_binary([Result, binary:part(String, EndOfLastMatch, byte_size(String)-EndOfLastMatch)])
+    end.

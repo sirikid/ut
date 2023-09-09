@@ -109,30 +109,21 @@ map_join(Sep, Fun, List) ->
 to_list(Map) ->
     lists:keysort(1, maps:to_list(Map)).
 
-encode(Name, name) ->
-    uri_string:quote(lax_percent_decode(Name));
-encode(Value, unreserved) ->
-    uri_string:quote(Value);
-encode(Value, reserved) ->
-    preserve_percent_encoded(Value, "!#$&'()*+,/:;=?@[]").
-
-lax_percent_decode(String) ->
-    iolist_to_binary(
-      [case Part of
-           {literal, Literal} ->
-               Literal;
-           {encoded, <<$%, Hex/binary>>} ->
-               binary:decode_hex(Hex)
-       end || Part <- find_percent_encoded(String)]).
+-spec encode(binary(), atom()) -> binary().
+encode(String, unreserved) ->
+    uri_string:quote(String);
+encode(String, name) ->
+    preserve_percent_encoded(String, "");
+encode(String, reserved) ->
+    preserve_percent_encoded(String, "!#$&'()*+,/:;=?@[]").
 
 preserve_percent_encoded(String, Allow) ->
-    iolist_to_binary(
-      [case Part of
-           {literal, Literal} ->
-               uri_string:quote(Literal, Allow);
-           {encoded, Encoded} ->
-               Encoded
-       end || Part <- find_percent_encoded(String)]).
+    [case Part of
+         {literal, Literal} ->
+             uri_string:quote(Literal, Allow);
+         {encoded, Encoded} ->
+             Encoded
+     end || Part <- find_percent_encoded(String)].
 
 find_percent_encoded(String) ->
     case re:run(String, "%[[:xdigit:]]{2}", [global]) of

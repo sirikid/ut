@@ -14,7 +14,9 @@
 
 -opaque template() :: #ut_template{components :: [component()]}.
 
--type parse_opt() :: {keys, ut_path:conv()}.
+-type parse_opt() ::
+        {variables, binary | atoms | 'atoms!'}
+      | {dots, keep | split}.
 
 -type expand_opt() :: {binary, boolean()} | ut_expr:expand_opt().
 
@@ -61,8 +63,21 @@ parse(String, Options) ->
         {fail, Fail} ->
             {error, Fail};
         Components1 ->
-            Conv = proplists:get_value(keys, Options, none),
-            Components2 = transform_expressions(Components1, fun ut_path:conv/3, [Conv]),
+            Variables = proplists:get_value(variables, Options, binary),
+            Dots = proplists:get_value(dots, Options, keep),
+
+            MapF =
+                case Variables of
+                    binary -> fun(Key) -> Key end;
+                    atoms -> fun binary_to_atom/1;
+                    'atoms!' -> fun binary_to_existing_atom/1
+                end,
+            ConvF =
+                case Dots of
+                    split -> fun(Path) -> lists:map(MapF, Path) end;
+                    keep -> fun(Path) -> [MapF(unicode:characters_to_binary(lists:join(<<".">>, Path)))] end
+                end,
+            Components2 = transform_expressions(Components1, fun ut_path:conv/3, [ConvF]),
             {ok, #ut_template{components=Components2}}
     end.
 

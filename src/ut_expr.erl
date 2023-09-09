@@ -44,13 +44,13 @@ expand(Operator, Variables, Substitutes, Options) ->
 operator_description(Operator) ->
     case Operator of
         simple     -> #op_desc{first="", sep=","};
-        reserved   -> #op_desc{first="", sep=",", allow="!#$&'()*+,/:;=?@[]"};
+        reserved   -> #op_desc{first="", sep=",", allow='pct-encoded'};
         labels     -> #op_desc{first=".", sep="."};
         path       -> #op_desc{first="/", sep="/"};
         parameter  -> #op_desc{first=";", sep=";", named=true};
         query      -> #op_desc{first="?", sep="&", named=true, ifemp="="};
         query_cont -> #op_desc{first="&", sep="&", named=true, ifemp="="};
-        fragment   -> #op_desc{first="#", sep=",", allow="!#$&'()*+,/:;=?@[]"}
+        fragment   -> #op_desc{first="#", sep=",", allow='pct-encoded'}
     end.
 
 %% Why we have to write this function every time?
@@ -109,23 +109,56 @@ map_join(Sep, Fun, List) ->
 to_list(Map) ->
     lists:keysort(1, maps:to_list(Map)).
 
-encode(<<Name/binary>>, key) ->
-    encode(percent_decode(Name), "");
-encode(Scalar, Allowed) when ?is_scalar(Scalar) ->
-    uri_string:quote(to_binary(Scalar), Allowed).
+encode(Name, key) ->
+    uri_string:quote(lax_percent_decode(Name));
+encode(Value, unreserved) ->
+    uri_string:quote(Value);
+encode(Value, reserved) ->
+    uri_string:quote(Value, "!#$&'()*+,/:;=?@[]");
+encode(Value, 'pct-encoded') ->
+    preserve_percent_encoded(Value, "!#$&'()*+,/:;=?@[]");
+    %% uri_string:quote(lax_percent_decode(Value), "!#$&'()*+,/:;=?@[]");
+encode(Value, Allow) ->
+    uri_string:quote(Value, Allow).
 
-percent_decode(<<String/binary>>) ->
+lax_percent_decode(String) ->
+    iolist_to_binary(
+     [case Part of
+          {literal, Literal} ->
+              Literal;
+          {encoded, Encoded} ->
+              binary:decode_hex(binary:part(Encoded, 1, 2))
+      end || Part <- percent_encoding_list(String)]).
+
+preserve_percent_encoded(String, Allow) ->
+    iolist_to_binary(
+     [case Part of
+          {literal, Literal} ->
+              uri_string:quote(Literal, Allow);
+          {encoded, Encoded} ->
+              Encoded
+      end || Part <- percent_encoding_list(String)]).
+
+percent_encoding_list(String) ->
     case re:run(String, "%[[:xdigit:]]{2}", [global]) of
         nomatch ->
-            String;
+            [{literal, String}];
         {match, Matches} ->
             {EndOfLastMatch, Result} =
                 lists:foldl(
                   fun([{Pos, Length}], {EndOfPrevMatch, Acc}) ->
                           Literal = binary:part(String, EndOfPrevMatch, Pos-EndOfPrevMatch),
-                          DecodeChar = binary:decode_hex(binary:part(String, Pos+1, Length-1)),
-                          {Pos+Length, [Acc, Literal, DecodeChar]}
+                          PctEncoded = binary:part(String, Pos, Length),
+                          {Pos+Length, [{encoded, PctEncoded}, {literal, Literal} | Acc]}
                   end,
-                  {0, []}, Matches),
-            iolist_to_binary([Result, binary:part(String, EndOfLastMatch, byte_size(String)-EndOfLastMatch)])
+                  {0, []},
+                  Matches),
+            Tail =
+                case byte_size(String) of
+                    EndOfLastMatch ->
+                        [];
+                    StringLength ->
+                        [{literal, binary:part(String, EndOfLastMatch, StringLength-EndOfLastMatch)}]
+                end,
+            lists:reverse(Tail ++ Result)
     end.

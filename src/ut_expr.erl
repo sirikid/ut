@@ -60,7 +60,7 @@ to_binary(Atom) when is_atom(Atom) ->
 to_binary(Integer) when is_integer(Integer) ->
     integer_to_binary(Integer);
 to_binary(Float) when is_float(Float) ->
-    float_to_binary(Float);
+    float_to_binary(Float, [short]);
 to_binary(<<Binary/binary>>) ->
     Binary.
 

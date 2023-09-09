@@ -3,27 +3,22 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(
-   assertMember(ExpectList, Expr),
-   begin
-       ((fun () ->
-                 ExpectListV = (ExpectList),
-                 ExprV = (Expr),
-                 case lists:member(ExprV, ExpectListV) of
-                     true -> ok;
-                     false ->
-                         erlang:error(
-                           {assertMember,
-                            [{module, ?MODULE},
-                             {line, ?LINE},
-                             {expression, ((??Expr))},
-                             {expected, ExpectListV},
-                             {value, ExprV}]})
-                 end
-         end)())
-   end
-  ).
-
--define(_assertMember(Expects, Expr), ?_test(?assertMember(Expects, Expr))).
+   _assertExpansion(Expected, Template, Variables),
+   ?_test(
+      ?LET(
+         Actual, ut:expand(Template, Variables),
+         case lists:member(Actual, Expected) of
+             true ->
+                 ok;
+             false ->
+                 erlang:error(
+                   {assertExpansion,
+                    [{module, ?MODULE},
+                     {line, ?LINE},
+                     {actual, Actual},
+                     {expected, Expected},
+                     {variables, Variables}]})
+         end))).
 
 expand_test_() ->
     [Test || File <- ["ref-tests/extended-tests.json",
@@ -45,11 +40,9 @@ tests_from_file(File) ->
                                 false ->
                                     ?_assertException(_, _, ut:expand(Template, Variables));
                                 <<Expansion/binary>> ->
-                                    ?_assertEqual(Expansion, ut:expand(Template, Variables));
-                                [Expansion] ->
-                                    ?_assertEqual(Expansion, ut:expand(Template, Variables));
+                                    ?_assertExpansion([Expansion], Template, Variables);
                                 Expansions when is_list(Expansions) ->
-                                    ?_assertMember(Expansions, ut:expand(Template, Variables))
+                                    ?_assertExpansion(Expansions, Template, Variables)
                             end,
                         {Name, Test}
                 end,

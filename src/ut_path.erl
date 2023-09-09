@@ -21,7 +21,7 @@ conv(Op, Vars, Conv) ->
 
 -spec conv_fun(conv()) -> conv_fun().
 conv_fun(none) ->
-    fun(Path) -> Path end;
+    fun(Path) -> [iolist_to_binary(lists:join(<<".">>, Path))] end;
 conv_fun(binary) ->
     key_conv(fun erlang:atom_to_binary/1);
 conv_fun(atoms) ->

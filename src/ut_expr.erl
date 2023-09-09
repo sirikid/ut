@@ -92,6 +92,8 @@ expand_value(#op_desc{named=false, encode=Encode}, #ut_value{value=Scalar, modif
     Encode(string:slice(to_binary(Scalar), 0, Length));
 expand_value(#op_desc{named=true, encode=Encode}, #ut_value{name=Name, value=Scalar, modifier={trim, Length}}) when ?is_scalar(Scalar) ->
     [Encode(Name), <<"=">>, Encode(string:slice(to_binary(Scalar), 0, Length))];
+expand_value(#op_desc{encode=Encode}, #ut_value{value=Scalar, modifier=exploded}) when ?is_scalar(Scalar) ->
+    [Encode(to_binary(Scalar))];
 expand_value(#op_desc{named=false, encode=Encode}, #ut_value{value=[_|_]=List, modifier=none}) ->
     map_join(<<",">>, Encode, List);
 expand_value(#op_desc{named=true, encode=Encode}, #ut_value{name=Name, value=[_|_]=List, modifier=none}) ->

@@ -2,7 +2,7 @@
 
 template <- (literals / expression)* !. `lists:append(Node)`;
 
-literals <- ([!#$&()*+,\\-./0-9:;=?@A-Z\\[\\]_a-z~] / pct_encoded)+
+literals <- ([!#$&\'()*+,\\-./0-9:;=?@A-Z\\[\\]_a-z~] / pct_encoded)+
 `unicode:characters_to_binary(Node)`;
 
 %% FIXME: ucschar and iprivate does not work
